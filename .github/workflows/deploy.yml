@@ -82,7 +82,7 @@ jobs:
         if: github.event_name == 'push'
         run: |
           az containerapp update \
-            -name ${{ env.AZURE_CONTAINER_APP }} \
+            --name ${{ env.AZURE_CONTAINER_APP }} \
             --resource-group ${{ env.AZURE_RESOURCE_GROUP }} \
             --image ${{ env.ACR_NAME }}.azurecr.io/${{ env.IMAGE_NAME }}:${{ github.sha }}
 
