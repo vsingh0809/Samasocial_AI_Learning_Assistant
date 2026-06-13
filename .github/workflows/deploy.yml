@@ -1,65 +1,51 @@
-# deploy.yml
-# WHAT: On every push to main → build → push to ACR → deploy to Container Apps
-# WHY ONLY MAIN: feature branches shouldn't auto-deploy to production
-#               developers test locally, main = production-ready code only
-
 name: Build and Deploy RAG API
 
 on:
   push:
     branches: [main]
-  # WHY pull_request trigger on main:
-  # Runs build+test on PRs but NOT deploy
-  # Catches broken code before it hits main
   pull_request:
     branches: [main]
 
-# ── OIDC SECURITY PERMISSIONS ──────────────────────────────────────────
-# WHY: Required to allow GitHub to request a secure identity token from Azure
-# Without id-token: write, step 2 (Azure Login) will throw a 403 / token error
+# WHY TOP LEVEL PERMISSIONS:
+# Grants OIDC token minting for the entire workflow
 permissions:
   id-token: write
   contents: read
 
 env:
-  # WHY ENV AT TOP LEVEL:
-  # Single place to update when you rename resources
-  # Referenced as ${{ env.ACR_NAME }} throughout
   ACR_NAME: ragregistry
   AZURE_CONTAINER_APP: rag-api
   AZURE_RESOURCE_GROUP: rag-rg
   IMAGE_NAME: rag-api
+  # WHY NODE 24 ENV VAR:
+  # Fixes the deprecation warning without waiting for default switch
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
 
 jobs:
   build-and-deploy:
     runs-on: ubuntu-latest
 
-    steps:
-      # ── 1. Checkout code ───────────────────────────────────────────────
-      - name: Checkout
-        uses: actions/checkout@v4
+    # WHY REPEAT PERMISSIONS AT JOB LEVEL:
+    # GitHub requires explicit permissions at job level for OIDC
+    # Top level alone is not always inherited correctly
+    permissions:
+      id-token: write
+      contents: read
 
-      # ── 2. Login to Azure ──────────────────────────────────────────────
-      # WHY OIDC (federated credentials) not password:
-      # No secrets stored in GitHub — Azure trusts GitHub's identity token
-      # Industry standard — no rotating secrets, no expiry issues
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4.2.2
+
       - name: Azure Login
-        uses: azure/login@v2
+        uses: azure/login@v2.3.0
         with:
           client-id: ${{ secrets.AZURE_CLIENT_ID }}
           tenant-id: ${{ secrets.AZURE_TENANT_ID }}
           subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
 
-      # ── 3. Login to ACR ────────────────────────────────────────────────
-      - name: Login to Azure Container Registry
-        run: |
-          az acr login --name ${{ env.ACR_NAME }}
+      - name: Login to ACR
+        run: az acr login --name ${{ env.ACR_NAME }}
 
-      # ── 4. Build Docker image ──────────────────────────────────────────
-      # WHY TAG WITH SHA:
-      # Every commit gets a unique image tag
-      # You can roll back to any previous version by SHA
-      # 'latest' tag alone = no rollback history
       - name: Build Docker image
         run: |
           docker build \
@@ -67,17 +53,12 @@ jobs:
             -t ${{ env.ACR_NAME }}.azurecr.io/${{ env.IMAGE_NAME }}:latest \
             .
 
-      # ── 5. Push to ACR ─────────────────────────────────────────────────
       - name: Push to ACR
-        # WHY ONLY ON PUSH TO MAIN (not PRs):
-        # PRs just verify the build works — no push needed
-        # Saves ACR storage costs on every PR
         if: github.event_name == 'push'
         run: |
           docker push ${{ env.ACR_NAME }}.azurecr.io/${{ env.IMAGE_NAME }}:${{ github.sha }}
           docker push ${{ env.ACR_NAME }}.azurecr.io/${{ env.IMAGE_NAME }}:latest
 
-      # ── 6. Deploy to Azure Container Apps ─────────────────────────────
       - name: Deploy to Azure Container Apps
         if: github.event_name == 'push'
         run: |
@@ -86,11 +67,9 @@ jobs:
             --resource-group ${{ env.AZURE_RESOURCE_GROUP }} \
             --image ${{ env.ACR_NAME }}.azurecr.io/${{ env.IMAGE_NAME }}:${{ github.sha }}
 
-      # ── 7. Verify deployment ───────────────────────────────────────────
       - name: Health check
         if: github.event_name == 'push'
         run: |
-          # Wait for deployment to stabilize
           sleep 30
           APP_URL=$(az containerapp show \
             --name ${{ env.AZURE_CONTAINER_APP }} \
@@ -98,4 +77,4 @@ jobs:
             --query properties.configuration.ingress.fqdn \
             --output tsv)
           curl -f https://${APP_URL}/health || exit 1
-          echo "✅ Deployment verified at https://${APP_URL}"
+          echo "✅ Deployed at https://${APP_URL}"
