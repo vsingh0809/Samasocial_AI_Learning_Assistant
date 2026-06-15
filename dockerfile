@@ -2,40 +2,28 @@ FROM python:3.11-slim
 
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
-    # WHY: tells uv where to install — we control the path
-    UV_PROJECT_ENVIRONMENT=/app/.venv \
-    # WHY: disables uv cache inside container — we don't need it after install
-    UV_NO_CACHE=1
+    UV_NO_CACHE=1 \
+    PATH="/root/.local/bin:$PATH"
 
-# WHY --no-install-recommends: skip optional packages debian pulls in
-# WHY combine apt commands in one RUN: each RUN = one layer
-# WHY rm -rf /var/lib/apt/lists: delete apt cache immediately in same layer
-RUN apt-get update && apt-get install -y --no-install-recommends \
-    curl \
-    && rm -rf /var/lib/apt/lists/*
+# WHY THIS APPROACH:
+# Instead of curl installing uv (pulls 61MB of extras)
+# We copy ONLY the uv binary from the official uv image
+# That image has uv at /uv — we take just that file
+# Result: ~10MB instead of 61MB
+COPY --from=ghcr.io/astral-sh/uv:0.5.4 /uv /usr/local/bin/uv
 
-# WHY install uv via script not COPY --from:
-# COPY --from pulls the entire uv Docker image (58MB of bloat)
-# This installs only the uv binary (~10MB)
-RUN curl -LsSf https://astral.sh/uv/install.sh | sh
-ENV PATH="/root/.local/bin:$PATH"
-
-# WHY create user BEFORE copying files:
-# So we can set ownership at COPY time, not via chown layer after
 RUN adduser --disabled-password --gecos "" appuser
 
 WORKDIR /app
 
 COPY pyproject.toml uv.lock ./
 
-# WHY --frozen: use exact uv.lock versions, no resolution
-# WHY --no-dev: skip pytest/ruff in production
-# WHY && find ... -delete: remove compiled .pyc cache uv leaves behind
-RUN uv sync --frozen --no-dev && \
-    find /app/.venv -type d -name "__pycache__" -exec rm -rf {} + 2>/dev/null || true
+# WHY --no-install-project:
+# Installs only dependencies, not your own package
+# Faster and cleaner
+RUN uv sync --frozen --no-dev --no-install-project && \
+    find /root/.local -type d -name "__pycache__" -exec rm -rf {} + 2>/dev/null || true
 
-# WHY --chown here instead of chown layer:
-# COPY --chown sets ownership inline = zero extra layer = no size duplication
 COPY --chown=appuser:appuser api/ ./api/
 COPY --chown=appuser:appuser clients/ ./clients/
 COPY --chown=appuser:appuser ingestion/ ./ingestion/

@@ -1,7 +1,6 @@
-# ── Clients ──────────────────────────────────
 from langchain_openai import AzureOpenAIEmbeddings
-import logging
 
+import logging
 import os
 from dotenv import load_dotenv
 
