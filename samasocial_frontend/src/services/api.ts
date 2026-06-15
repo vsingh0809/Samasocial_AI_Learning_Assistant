@@ -133,13 +133,26 @@ export async function ingestUrl(url: string, kind: SourceKind, sessionId: string
 }
 
 function parseStreamLine(line: string): StreamUpdate | null {
-  const trimmed = line.trim();
-  if (!trimmed || trimmed === "data: [DONE]" || trimmed === "[DONE]") {
-    return trimmed ? { done: true } : null;
+  // 1. Do not globally trim the line here! It destroys token spacing.
+  if (!line) return null;
+
+  let payload = line;
+  
+  // 2. Safe parsing of the standard SSE "data: " prefix
+  if (line.startsWith("data:")) {
+    payload = line.slice(5);
+    // Standard SSE specifications leave exactly one space after the colon.
+    // We only strip that one structural space if it exists.
+    if (payload.startsWith(" ")) {
+      payload = payload.slice(1);
+    }
   }
 
-  const payload = trimmed.startsWith("data:") ? trimmed.slice(5).trim() : trimmed;
-  if (!payload) return null;
+  // 3. Use a separate variable for evaluation checks so the payload stays pristine
+  const normalizedCheck = payload.trim();
+  if (!normalizedCheck || normalizedCheck === "[DONE]") {
+    return normalizedCheck ? { done: true } : null;
+  }
 
   if (payload.startsWith("[SOURCES]")) {
     try {
@@ -153,7 +166,7 @@ function parseStreamLine(line: string): StreamUpdate | null {
     }
   }
 
-  if (payload === "[ERROR]") {
+  if (normalizedCheck === "[ERROR]") {
     return { error: "The backend stream failed." };
   }
 
@@ -167,6 +180,7 @@ function parseStreamLine(line: string): StreamUpdate | null {
       done: parsed.done === true,
     };
   } catch {
+    // 4. Fallback for raw text: Return the payload with its original spacing intact!
     return { token: payload };
   }
 }
