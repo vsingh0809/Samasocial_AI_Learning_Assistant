@@ -1,45 +1,127 @@
-# Secrets — NEVER commit
+# ══════════════════════════════════════════════════════
+# ROOT .gitignore — covers backend (Python) + frontend (React/Vite)
+# ══════════════════════════════════════════════════════
+
+
+# ── SECRETS — NEVER COMMIT ────────────────────────────
 .env
 .env.*
 *.env
+!.env.example
 
-# Python cache
-__pycache__/
-*.pyc
-*.pyo
-*.pyd
-.Python
+
+# ══════════════════════════════════════════════════════
+# PYTHON / BACKEND
+# ══════════════════════════════════════════════════════
 
 # Virtual environments
 .venv/
 venv/
 env/
+ENV/
 
-# uv
-# WHY KEEP uv.lock: lock file must be committed
-# so every developer and CI gets identical deps
-# DO NOT add uv.lock here
+# uv cache
+.uv/
 
-# Build artifacts
+# Python cache
+__pycache__/
+*.py[cod]
+*$py.class
+*.pyo
+
+# Distribution / packaging
 dist/
 build/
 *.egg-info/
+*.egg
+MANIFEST
 
 # Testing
 .pytest_cache/
 .coverage
 htmlcov/
+.tox/
 
+# Type checking
+.mypy_cache/
+.dmypy.json
+
+# Ruff cache
+.ruff_cache/
+
+# Temp files from ingestion
+tmp/
+*.pdf
+*.pptx
+*.docx
+
+# Logs
+logs/
+*.log
+
+
+# ══════════════════════════════════════════════════════
+# NODE / FRONTEND
+# ══════════════════════════════════════════════════════
+
+# Dependencies
+node_modules/
+.npm/
+
+# Build output
+dist/
+build/
+.vite/
+.vite-temp/
+
+# TypeScript
+*.tsbuildinfo
+
+# Vite
+vite.config.ts.timestamp-*
+
+# Testing
+coverage/
+
+
+# ══════════════════════════════════════════════════════
 # IDEs
+# ══════════════════════════════════════════════════════
+
 .vscode/
 .idea/
 *.swp
+*.swo
+*.suo
+.project
+.classpath
 
+
+# ══════════════════════════════════════════════════════
 # OS
+# ══════════════════════════════════════════════════════
+
 .DS_Store
 Thumbs.db
+desktop.ini
 
-# Project specific
-*.pdf
-tmp/
-logs/
+
+# ══════════════════════════════════════════════════════
+# DOCKER
+# ══════════════════════════════════════════════════════
+
+# Never commit local docker overrides
+docker-compose.override.yml
+
+
+# ══════════════════════════════════════════════════════
+# AZURE / CLOUD
+# ══════════════════════════════════════════════════════
+
+# Azure CLI session files
+.azure/
+
+# Terraform state if added later
+*.tfstate
+*.tfstate.backup
+.terraform/
